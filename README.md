@@ -1,4 +1,4 @@
-# AI-Medical-chatboT
+# AI-Medical-chatbot
 Medical Chatbot using Generative AI
 
 # Build-a-Complete-Medical-Chatbot-with-LangChain-FAISS-Flask-a locally hosted LLM via Ollama (phi3).
