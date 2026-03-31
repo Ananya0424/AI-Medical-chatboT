@@ -3,9 +3,12 @@ from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
-
 from langchain_community.llms import Ollama
-from langchain.chains import RetrievalQA
+from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
+from langchain.prompts import PromptTemplate
+from src.prompt import system_prompt
+
 # ----------------------
 # Load ENV
 # ----------------------
@@ -46,19 +49,30 @@ retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 # ----------------------
 # Ollama
 # ----------------------
-from langchain_community.llms import Ollama
-
 llm = Ollama(model="phi3", base_url="http://localhost:11434")
 
+# ----------------------
+# Memory & Prompt
+# ----------------------
+memory = ConversationBufferMemory(
+    memory_key="chat_history",
+    return_messages=True,
+    output_key="answer"
+)
 
+CUSTOM_PROMPT = PromptTemplate(
+    template=system_prompt + "\nQuestion: {question}\nAnswer:",
+    input_variables=["context", "chat_history", "question"]
+)
 
 # ----------------------
-# Prompt
+# Chain
 # ----------------------
-qa = RetrievalQA.from_chain_type(
+qa = ConversationalRetrievalChain.from_llm(
     llm=llm,
-    chain_type="stuff",
     retriever=retriever,
+    memory=memory,
+    combine_docs_chain_kwargs={"prompt": CUSTOM_PROMPT},
     return_source_documents=True
 )
 
@@ -81,8 +95,12 @@ def chat():
         return jsonify({"error": "No question received"}), 400
 
     # Get answer from QA
-    result = qa.invoke({"query": msg})
-    return jsonify({"answer": result["result"]})
+    try:
+        result = qa.invoke({"question": msg})
+        return jsonify({"answer": result["answer"]})
+    except Exception as e:
+        print(f"Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # Run Flask
