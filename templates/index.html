@@ -25,7 +25,7 @@
         </div>
         <div class="header-info">
             <h1>AI Medical Assistant</h1>
-            <p><span class="status-dot"></span> Online & Ready to Help</p>
+            <p id="statusIndicator"><span class="status-dot"></span> Checking Status...</p>
         </div>
         <div style="margin-left: auto;">
             <button id="clearChat" title="Clear Conversation" style="background: none; border: none; color: var(--text-secondary); cursor: pointer;">
@@ -158,12 +158,36 @@
         };
     });
 
-    // Clear Chat Logic (Frontend only for now)
-    document.getElementById('clearChat').onclick = () => {
+    // --- NEW: Status Polling ---
+    async function checkStatus() {
+        const ind = document.getElementById('statusIndicator');
+        try {
+            const resp = await fetch('/status');
+            const data = await resp.json();
+            if (data.status === 'Online') {
+                ind.innerHTML = `<span class="status-dot" style="background: #4caf50; box-shadow: 0 0 10px #4caf50;"></span> Online (phi3)`;
+            } else {
+                ind.innerHTML = `<span class="status-dot" style="background: #f44336; box-shadow: 0 0 10px #f44336;"></span> Ollama Offline`;
+            }
+        } catch {
+            ind.innerHTML = `<span class="status-dot" style="background: #ff9800; box-shadow: 0 0 10px #ff9800;"></span> Disconnected`;
+        }
+    }
+    checkStatus();
+    setInterval(checkStatus, 30000); // Check every 30s
+
+    // Clear Chat Logic (Now with Backend sync)
+    document.getElementById('clearChat').onclick = async () => {
         if (confirm("Clear conversation history?")) {
-            const botMsgs = chatWindow.querySelectorAll('.message');
-            botMsgs.forEach((m, i) => { if(i > 0) m.remove(); }); // Keep first message
-            if (startersContainer) startersContainer.style.display = 'flex';
+            try {
+                await fetch('/clear', { method: 'POST' });
+                const botMsgs = chatWindow.querySelectorAll('.message');
+                botMsgs.forEach((m, i) => { if(i > 0) m.remove(); }); 
+                if (startersContainer) startersContainer.style.display = 'flex';
+                appendMessage("History cleared successfully.", 'bot');
+            } catch {
+                alert("Failed to clear backend memory.");
+            }
         }
     };
 </script>

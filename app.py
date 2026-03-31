@@ -84,6 +84,23 @@ qa = ConversationalRetrievalChain.from_llm(
 def home():
     return render_template("index.html")
 
+@app.route("/status")
+def status():
+    # Basic check for Ollama accessibility
+    try:
+        import requests
+        resp = requests.get("http://localhost:11434/api/tags", timeout=2)
+        if resp.status_code == 200:
+            return jsonify({"status": "Online", "model": "phi3"})
+        return jsonify({"status": "Ollama Offline"}), 503
+    except:
+        return jsonify({"status": "Disconnected"}), 503
+
+@app.route("/clear", methods=["POST"])
+def clear_chat():
+    memory.clear()
+    return jsonify({"status": "History cleared"})
+
 @app.route("/get", methods=["POST"])
 def chat():
     # Accept form data or JSON
@@ -97,10 +114,13 @@ def chat():
     # Get answer from QA
     try:
         result = qa.invoke({"question": msg})
-        return jsonify({"answer": result["answer"]})
+        return jsonify({
+            "answer": result["answer"],
+            "source": [doc.metadata.get("source", "unknown") for doc in result.get("source_documents", [])]
+        })
     except Exception as e:
         print(f"Error: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "I couldn't reach my medical database. Is Ollama running?"}), 500
 
 
 # Run Flask
