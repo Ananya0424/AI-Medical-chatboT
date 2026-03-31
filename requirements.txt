@@ -1,10 +1,11 @@
 langchain>=0.3.0
 langchain-community>=0.3.0
 langchain-huggingface
+langchain-text-splitters
 faiss-cpu
 flask
 flask-cors
 sentence-transformers
 pypdf
 python-dotenv
--e .
+requests

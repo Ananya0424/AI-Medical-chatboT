@@ -14,18 +14,10 @@ from src.prompt import system_prompt
 # ----------------------
 load_dotenv()
 
-
-
 # ----------------------
 # Flask
 # ----------------------
 app = Flask(__name__)
-
-# ----------------------
-# Pinecone init (NEW API)
-# ----------------------
-
-
 
 # ----------------------
 # Embeddings
@@ -37,14 +29,17 @@ embedding = HuggingFaceEmbeddings(
 # ----------------------
 # VectorStore
 # ----------------------
-vectorstore = FAISS.load_local(
-    "faiss_index",
-    embedding,
-    allow_dangerous_deserialization=True
-)
-
-retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
-
+if os.path.exists("faiss_index"):
+    vectorstore = FAISS.load_local(
+        "faiss_index",
+        embedding,
+        allow_dangerous_deserialization=True
+    )
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+else:
+    print("❌ FAISS index not found! Please run store_index.py first.")
+    vectorstore = None
+    retriever = None
 
 # ----------------------
 # Ollama
@@ -60,6 +55,8 @@ memory = ConversationBufferMemory(
     output_key="answer"
 )
 
+# Important: Prompt variables must match what ConversationalRetrievalChain expects
+# {context} and {question} are standard. {chat_history} is provided by memory.
 CUSTOM_PROMPT = PromptTemplate(
     template=system_prompt + "\nQuestion: {question}\nAnswer:",
     input_variables=["context", "chat_history", "question"]
@@ -68,14 +65,16 @@ CUSTOM_PROMPT = PromptTemplate(
 # ----------------------
 # Chain
 # ----------------------
-qa = ConversationalRetrievalChain.from_llm(
-    llm=llm,
-    retriever=retriever,
-    memory=memory,
-    combine_docs_chain_kwargs={"prompt": CUSTOM_PROMPT},
-    return_source_documents=True
-)
-
+if retriever:
+    qa = ConversationalRetrievalChain.from_llm(
+        llm=llm,
+        retriever=retriever,
+        memory=memory,
+        combine_docs_chain_kwargs={"prompt": CUSTOM_PROMPT},
+        return_source_documents=True
+    )
+else:
+    qa = None
 
 # ----------------------
 # Routes
@@ -111,8 +110,12 @@ def chat():
     if not msg:
         return jsonify({"error": "No question received"}), 400
 
+    if not qa:
+        return jsonify({"error": "Database not initialized. Please run store_index.py."}), 503
+
     # Get answer from QA
     try:
+        # Use invoke() as __call__ is deprecated in LangChain
         result = qa.invoke({"question": msg})
         return jsonify({
             "answer": result["answer"],
@@ -120,9 +123,9 @@ def chat():
         })
     except Exception as e:
         print(f"Error: {e}")
-        return jsonify({"error": "I couldn't reach my medical database. Is Ollama running?"}), 500
+        return jsonify({"error": f"I couldn't reach my medical database. Details: {str(e)}"}), 500
 
 
 # Run Flask
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=8080) # Using 8080 or 5000 is fine, they use 5000 by default.
