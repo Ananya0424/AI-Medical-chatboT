@@ -4,51 +4,31 @@ from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import OllamaLLM
-from langchain.chains import ConversationalRetrievalChain
-from langchain.memory import ConversationBufferMemory
-from langchain.prompts import PromptTemplate
+from langchain_classic.chains import ConversationalRetrievalChain
+from langchain_classic.memory import ConversationBufferMemory
+
+from langchain_core.prompts import PromptTemplate
 from src.prompt import system_prompt
 
-# ----------------------
-# Load ENV
-# ----------------------
 load_dotenv()
-
-# ----------------------
-# Flask
-# ----------------------
 app = Flask(__name__)
 
-# ----------------------
-# Embeddings
-# ----------------------
 embedding = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
 
-# ----------------------
-# VectorStore
-# ----------------------
 if os.path.exists("faiss_index"):
     vectorstore = FAISS.load_local(
-        "faiss_index",
-        embedding,
-        allow_dangerous_deserialization=True
+        "faiss_index", embedding, allow_dangerous_deserialization=True
     )
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 else:
-    print("❌ FAISS index not found! Please run store_index.py first.")
+    print("FAISS index not found! Run store_index.py first.")
     vectorstore = None
     retriever = None
 
-# ----------------------
-# Ollama LLM
-# ----------------------
 llm = OllamaLLM(model="phi3", base_url="http://localhost:11434")
 
-# ----------------------
-# Memory & Prompt
-# ----------------------
 memory = ConversationBufferMemory(
     memory_key="chat_history",
     return_messages=True,
@@ -60,9 +40,6 @@ CUSTOM_PROMPT = PromptTemplate(
     input_variables=["context", "chat_history", "question"]
 )
 
-# ----------------------
-# Chain
-# ----------------------
 if retriever:
     qa = ConversationalRetrievalChain.from_llm(
         llm=llm,
@@ -74,9 +51,6 @@ if retriever:
 else:
     qa = None
 
-# ----------------------
-# Routes
-# ----------------------
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -102,13 +76,10 @@ def chat():
     msg = request.form.get("msg") or request.form.get("input") or request.form.get("message")
     if not msg and request.is_json:
         msg = request.json.get("msg") or request.json.get("input") or request.json.get("message")
-
     if not msg:
         return jsonify({"error": "No question received"}), 400
-
     if not qa:
-        return jsonify({"error": "Database not initialized. Please run store_index.py."}), 503
-
+        return jsonify({"error": "Database not initialized."}), 503
     try:
         result = qa.invoke({"question": msg})
         return jsonify({
@@ -116,9 +87,7 @@ def chat():
             "source": [doc.metadata.get("source", "unknown") for doc in result.get("source_documents", [])]
         })
     except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({"error": f"Error: {str(e)}"}), 500
-
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
