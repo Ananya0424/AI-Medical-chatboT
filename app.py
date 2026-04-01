@@ -2,8 +2,8 @@ import os
 from flask import Flask, render_template, request, jsonify
 from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.llms import Ollama
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_ollama import OllamaLLM
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import PromptTemplate
@@ -42,9 +42,9 @@ else:
     retriever = None
 
 # ----------------------
-# Ollama
+# Ollama LLM
 # ----------------------
-llm = Ollama(model="phi3", base_url="http://localhost:11434")
+llm = OllamaLLM(model="phi3", base_url="http://localhost:11434")
 
 # ----------------------
 # Memory & Prompt
@@ -55,8 +55,6 @@ memory = ConversationBufferMemory(
     output_key="answer"
 )
 
-# Important: Prompt variables must match what ConversationalRetrievalChain expects
-# {context} and {question} are standard. {chat_history} is provided by memory.
 CUSTOM_PROMPT = PromptTemplate(
     template=system_prompt + "\nQuestion: {question}\nAnswer:",
     input_variables=["context", "chat_history", "question"]
@@ -85,7 +83,6 @@ def home():
 
 @app.route("/status")
 def status():
-    # Basic check for Ollama accessibility
     try:
         import requests
         resp = requests.get("http://localhost:11434/api/tags", timeout=2)
@@ -102,7 +99,6 @@ def clear_chat():
 
 @app.route("/get", methods=["POST"])
 def chat():
-    # Accept form data or JSON
     msg = request.form.get("msg") or request.form.get("input") or request.form.get("message")
     if not msg and request.is_json:
         msg = request.json.get("msg") or request.json.get("input") or request.json.get("message")
@@ -113,9 +109,7 @@ def chat():
     if not qa:
         return jsonify({"error": "Database not initialized. Please run store_index.py."}), 503
 
-    # Get answer from QA
     try:
-        # Use invoke() as __call__ is deprecated in LangChain
         result = qa.invoke({"question": msg})
         return jsonify({
             "answer": result["answer"],
@@ -123,9 +117,8 @@ def chat():
         })
     except Exception as e:
         print(f"Error: {e}")
-        return jsonify({"error": f"I couldn't reach my medical database. Details: {str(e)}"}), 500
+        return jsonify({"error": f"Error: {str(e)}"}), 500
 
 
-# Run Flask
 if __name__ == "__main__":
-    app.run(debug=True, port=8080) # Using 8080 or 5000 is fine, they use 5000 by default.
+    app.run(debug=True, port=5000)
